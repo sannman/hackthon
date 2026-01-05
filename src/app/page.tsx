@@ -194,14 +194,17 @@ export default function Home() {
     "Plan is adapting in real-time to your updates.",
   );
   const [showAddTask, setShowAddTask] = useState(false);
-  const [newTask, setNewTask] = useState({
+  
+  const DEFAULT_NEW_TASK = {
     title: "",
     subjectId: "math",
     plannedMinutes: 30,
     dayOffset: 0,
     type: "concept" as "concept" | "practice" | "review",
     importance: 0.5,
-  });
+  };
+  
+  const [newTask, setNewTask] = useState(DEFAULT_NEW_TASK);
 
   const subjectMap = useMemo(
     () => Object.fromEntries(SUBJECTS.map((subject) => [subject.id, subject])),
@@ -346,7 +349,7 @@ export default function Home() {
     if (!newTask.title.trim()) return;
     
     const task: Task = {
-      id: `t${Date.now()}`,
+      id: `t${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: newTask.title,
       subjectId: newTask.subjectId,
       plannedMinutes: newTask.plannedMinutes,
@@ -357,14 +360,7 @@ export default function Home() {
     };
     
     setTasks((current) => [...current, task]);
-    setNewTask({
-      title: "",
-      subjectId: "math",
-      plannedMinutes: 30,
-      dayOffset: 0,
-      type: "concept",
-      importance: 0.5,
-    });
+    setNewTask(DEFAULT_NEW_TASK);
     setShowAddTask(false);
     setStatusNote("New task added. Timeline recalculated.");
   };
@@ -376,17 +372,20 @@ export default function Home() {
   };
 
   const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
-    setTasks((current) =>
-      current.map((task) =>
+    setTasks((current) => {
+      const updatedTasks = current.map((task) =>
         task.id === taskId ? { ...task, status: newStatus } : task,
-      ),
-    );
-    if (newStatus === "done") {
-      const task = tasks.find((item) => item.id === taskId);
-      if (task) {
-        setLoggedMinutes((minutes) => minutes + task.plannedMinutes);
+      );
+      
+      if (newStatus === "done") {
+        const task = updatedTasks.find((item) => item.id === taskId);
+        if (task) {
+          setLoggedMinutes((minutes) => minutes + task.plannedMinutes);
+        }
       }
-    }
+      
+      return updatedTasks;
+    });
     setStatusNote("Task status updated. Kanban board refreshed.");
   };
 
@@ -661,6 +660,7 @@ export default function Home() {
                               key={task.id}
                               draggable
                               onDragStart={() => setDraggingId(task.id)}
+                              onDragEnd={() => setDraggingId(null)}
                               className={cn(
                                 "rounded-lg border border-border bg-card p-3 cursor-move transition hover:shadow-md",
                                 draggingId === task.id && "opacity-50",
