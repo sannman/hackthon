@@ -13,21 +13,36 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type Difficulty = "easy" | "medium" | "hard";
 type TaskStatus = "pending" | "in-progress" | "done";
 
+type Topic = {
+  id: string;
+  name: string;
+  difficulty: number; // 1 | 2 | 3
+};
+
 type Subject = {
   id: string;
   name: string;
+  // Subject overall difficulty (can be derived or kept separate)
   difficulty: Difficulty;
   progress: number;
   plannedHours: number;
   spentHours: number;
-  weakTopics: string[];
+  // Replacing weakTopics string[] with topics object array for better management
+  topics: Topic[];
   exam: string;
 };
 
@@ -35,18 +50,12 @@ type Task = {
   id: string;
   title: string;
   subjectId: string;
+  topicId?: string; // Optional link to a topic
   plannedMinutes: number;
   dayOffset: number;
   status: TaskStatus;
   type: "concept" | "practice" | "review";
   importance: number;
-};
-
-type TimelineBlock = {
-  id: string;
-  task: Task;
-  start: string;
-  end: string;
 };
 
 const DEFAULT_TASKS: Task[] = [];
@@ -69,25 +78,19 @@ function loadSubjectsFromStorage(): Subject[] {
   const savedSubjects = window.localStorage.getItem("smart-study-subjects");
   if (savedSubjects) {
     try {
-      return JSON.parse(savedSubjects) as Subject[];
+      const parsed = JSON.parse(savedSubjects);
+      // Migration: Ensure topics array exists if it was weakTopics string[]
+      return parsed.map((s: any) => ({
+        ...s,
+        topics: Array.isArray(s.topics)
+          ? s.topics
+          : (s.weakTopics || []).map((t: string) => ({ id: t, name: t, difficulty: 2 }))
+      })) as Subject[];
     } catch {
       return [];
     }
   }
   return [];
-}
-
-function loadDifficultyFromStorage() {
-  if (typeof window === "undefined") return {};
-  const saved = window.localStorage.getItem("smart-study-difficulty");
-  if (saved) {
-    try {
-      return JSON.parse(saved) as Record<string, number>;
-    } catch {
-      return {};
-    }
-  }
-  return {};
 }
 
 function formatDayLabel(dayOffset: number) {
@@ -118,10 +121,11 @@ function ringStyle(value: number) {
 export default function Home() {
   const [subjects, setSubjects] = useState<Subject[]>(() => loadSubjectsFromStorage());
   const [tasks, setTasks] = useState<Task[]>(() => loadTasksFromStorage());
-  const [difficulty, setDifficulty] = useState<Record<string, number>>(
-    () => loadDifficultyFromStorage(),
-  );
+
+  // No longer using separate difficulty state, it's inside subjects -> topics
   const [selectedSubject, setSelectedSubject] = useState<string>("");
+  const [selectedTopicId, setSelectedTopicId] = useState<string>("");
+
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [focusSeconds, setFocusSeconds] = useState(25 * 60);
   const [focusActive, setFocusActive] = useState(false);
@@ -136,6 +140,7 @@ export default function Home() {
   const DEFAULT_NEW_TASK = {
     title: "",
     subjectId: subjects.length > 0 ? subjects[0].id : "",
+    topicId: "",
     plannedMinutes: 30,
     dayOffset: 0,
     type: "concept" as "concept" | "practice" | "review",
@@ -147,7 +152,8 @@ export default function Home() {
   const DEFAULT_NEW_SUBJECT = {
     name: "",
     difficulty: "medium" as Difficulty,
-    exam: "",
+    exam: undefined as Date | undefined,
+    topicsString: "", // Comma separated for input
   };
 
   const [newSubject, setNewSubject] = useState(DEFAULT_NEW_SUBJECT);
@@ -162,6 +168,18 @@ export default function Home() {
         setSelectedSubject(subjects[0].id);
     }
   }, [subjects, selectedSubject]);
+
+  // When selectedSubject changes, reset selectedTopicId
+  useEffect(() => {
+    if (selectedSubject) {
+      const subject = subjects.find(s => s.id === selectedSubject);
+      if (subject && subject.topics.length > 0) {
+        setSelectedTopicId(subject.topics[0].id);
+      } else {
+        setSelectedTopicId("");
+      }
+    }
+  }, [selectedSubject, subjects]);
 
   // Update DEFAULT_NEW_TASK subjectId when subjects change
   useEffect(() => {
@@ -179,14 +197,6 @@ export default function Home() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("smart-study-subjects", JSON.stringify(subjects));
   }, [subjects]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      "smart-study-difficulty",
-      JSON.stringify(difficulty),
-    );
-  }, [difficulty]);
 
   useEffect(() => {
     if (!focusActive) return;
@@ -214,7 +224,20 @@ export default function Home() {
 
         const { days } = subject.exam ? toCountdown(subject.exam) : { days: 30 };
         const examWeight = Math.max(0, 30 - days) / 30;
-        const difficultyWeight = difficulty[task.subjectId] ?? 1;
+
+        // Use topic difficulty if available, else subject difficulty (mapped to 1-3)
+        let difficultyValue = 1;
+        if (task.topicId) {
+          const topic = subject.topics.find(t => t.id === task.topicId);
+          if (topic) {
+            difficultyValue = topic.difficulty;
+          }
+        } else {
+          // Fallback to subject difficulty
+           difficultyValue = subject.difficulty === 'hard' ? 3 : subject.difficulty === 'medium' ? 2 : 1;
+        }
+
+        const difficultyWeight = difficultyValue;
         const urgencyWeight = Math.max(0, 5 - task.dayOffset) / 5;
         const score =
           difficultyWeight * 0.35 +
@@ -224,7 +247,7 @@ export default function Home() {
         return { task, score, subject, examWeight, urgencyWeight };
       })
       .sort((a, b) => b.score - a.score);
-  }, [difficulty, subjectMap, tasks]);
+  }, [subjectMap, tasks]);
 
   const nextExam = useMemo(() => {
     if (subjects.length === 0) return null;
@@ -285,6 +308,7 @@ export default function Home() {
       id: `t${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: newTask.title,
       subjectId: newTask.subjectId,
+      topicId: newTask.topicId || undefined,
       plannedMinutes: newTask.plannedMinutes,
       dayOffset: newTask.dayOffset,
       status: "pending",
@@ -302,6 +326,17 @@ export default function Home() {
       if (!newSubject.name.trim()) return;
 
       const id = newSubject.name.toLowerCase().replace(/\s+/g, '-');
+
+      const topics: Topic[] = newSubject.topicsString
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t.length > 0)
+        .map(t => ({
+            id: t.toLowerCase().replace(/\s+/g, '-'),
+            name: t,
+            difficulty: 2 // Default medium
+        }));
+
       const subject: Subject = {
           id: id,
           name: newSubject.name,
@@ -309,26 +344,29 @@ export default function Home() {
           progress: 0,
           plannedHours: 10,
           spentHours: 0,
-          weakTopics: [],
-          exam: newSubject.exam
+          topics: topics,
+          exam: newSubject.exam ? newSubject.exam.toISOString() : ""
       };
 
       setSubjects(prev => [...prev, subject]);
       
-      // Initialize difficulty
-      setDifficulty(prev => ({
-          ...prev,
-          [id]: newSubject.difficulty === 'hard' ? 3 : newSubject.difficulty === 'medium' ? 2 : 1
-      }));
-
       setNewSubject(DEFAULT_NEW_SUBJECT);
       setShowAddSubject(false);
       setStatusNote("New subject added.");
   };
 
-  const handleDifficultyChange = (subjectId: string, value: number) => {
-    setDifficulty((current) => ({ ...current, [subjectId]: value }));
-    setStatusNote("Difficulty updated. Priority weights refreshed.");
+  const handleTopicDifficultyChange = (subjectId: string, topicId: string, value: number) => {
+    setSubjects(current => current.map(sub => {
+        if (sub.id !== subjectId) return sub;
+        return {
+            ...sub,
+            topics: sub.topics.map(t => {
+                if (t.id !== topicId) return t;
+                return { ...t, difficulty: value };
+            })
+        }
+    }));
+    setStatusNote("Topic difficulty updated. Priority weights refreshed.");
   };
 
   const focusMinutes = Math.floor(focusSeconds / 60)
@@ -337,7 +375,7 @@ export default function Home() {
   const focusMinsRemaining = (focusSeconds % 60).toString().padStart(2, "0");
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-16 pt-10 lg:px-8 font-sans">
+    <main className="mx-auto flex max-w-[1800px] flex-col gap-6 px-4 pb-16 pt-10 lg:px-8 font-sans">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -377,7 +415,7 @@ export default function Home() {
                 <CardTitle>Add New Subject</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-2">
                         <Label htmlFor="subject-name">Subject Name</Label>
                         <Input
@@ -390,22 +428,34 @@ export default function Home() {
                     <div className="space-y-2">
                         <Label htmlFor="subject-difficulty">Difficulty</Label>
                         <Select
-                            id="subject-difficulty"
                             value={newSubject.difficulty}
-                            onChange={(e) => setNewSubject({ ...newSubject, difficulty: e.target.value as Difficulty })}
+                            onValueChange={(val) => setNewSubject({ ...newSubject, difficulty: val as Difficulty })}
                         >
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
+                            <SelectTrigger id="subject-difficulty">
+                                <SelectValue placeholder="Select difficulty" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="easy">Easy</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="hard">Hard</SelectItem>
+                            </SelectContent>
                         </Select>
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="subject-exam">Exam Date</Label>
+                        <Label>Exam Date</Label>
+                        <DatePicker
+                            date={newSubject.exam}
+                            setDate={(date) => setNewSubject({ ...newSubject, exam: date })}
+                            className="w-full"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="subject-topics">Topics (comma separated)</Label>
                         <Input
-                            id="subject-exam"
-                            type="datetime-local"
-                            value={newSubject.exam}
-                            onChange={(e) => setNewSubject({ ...newSubject, exam: e.target.value })}
+                            id="subject-topics"
+                            placeholder="e.g. Limits, Derivatives, Integrals"
+                            value={newSubject.topicsString}
+                            onChange={(e) => setNewSubject({ ...newSubject, topicsString: e.target.value })}
                         />
                     </div>
                 </div>
@@ -516,7 +566,7 @@ export default function Home() {
             {showAddTask && (
               <div className="mb-6 rounded-xl border border-border bg-muted/40 p-4 space-y-4">
                 <h3 className="text-lg font-semibold">Add New Task</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="task-title">Task Title</Label>
                     <Input
@@ -531,17 +581,44 @@ export default function Home() {
                   <div className="space-y-2">
                     <Label htmlFor="task-subject">Subject</Label>
                     <Select
-                      id="task-subject"
                       value={newTask.subjectId}
-                      onChange={(e) =>
-                        setNewTask({ ...newTask, subjectId: e.target.value })
+                      onValueChange={(val) =>
+                        setNewTask({ ...newTask, subjectId: val })
                       }
                     >
-                      {subjects.map((subject) => (
-                        <option key={subject.id} value={subject.id}>
-                          {subject.name}
-                        </option>
-                      ))}
+                      <SelectTrigger id="task-subject">
+                         <SelectValue placeholder="Select subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {subjects.map((subject) => (
+                          <SelectItem key={subject.id} value={subject.id}>
+                            {subject.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="task-topic">Topic (Optional)</Label>
+                    <Select
+                      value={newTask.topicId}
+                      onValueChange={(val) =>
+                        setNewTask({ ...newTask, topicId: val })
+                      }
+                      disabled={!newTask.subjectId}
+                    >
+                      <SelectTrigger id="task-topic">
+                         <SelectValue placeholder="Select topic" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {subjects
+                            .find(s => s.id === newTask.subjectId)
+                            ?.topics.map((topic) => (
+                          <SelectItem key={topic.id} value={topic.id}>
+                            {topic.name}
+                          </SelectItem>
+                        )) || <div className="p-2 text-sm text-muted-foreground">No topics found</div>}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
@@ -563,18 +640,22 @@ export default function Home() {
                   <div className="space-y-2">
                     <Label htmlFor="task-type">Type</Label>
                     <Select
-                      id="task-type"
                       value={newTask.type}
-                      onChange={(e) =>
+                      onValueChange={(val) =>
                         setNewTask({
                           ...newTask,
-                          type: e.target.value as "concept" | "practice" | "review",
+                          type: val as "concept" | "practice" | "review",
                         })
                       }
                     >
-                      <option value="concept">Concept</option>
-                      <option value="practice">Practice</option>
-                      <option value="review">Review</option>
+                      <SelectTrigger id="task-type">
+                          <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="concept">Concept</SelectItem>
+                        <SelectItem value="practice">Practice</SelectItem>
+                        <SelectItem value="review">Review</SelectItem>
+                      </SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -622,6 +703,7 @@ export default function Home() {
                       <div className="space-y-3">
                         {statusTasks.map((task) => {
                           const subject = subjectMap[task.subjectId];
+                          const topicName = subject?.topics.find(t => t.id === task.topicId)?.name;
                           return (
                             <div
                               key={task.id}
@@ -643,6 +725,11 @@ export default function Home() {
                                       <Badge variant="outline" className="text-xs">
                                         {subject?.name || "Unknown"}
                                       </Badge>
+                                      {topicName && (
+                                        <Badge variant="secondary" className="text-xs">
+                                            {topicName}
+                                        </Badge>
+                                      )}
                                       <Badge variant="secondary" className="text-xs">
                                         {task.plannedMinutes}m
                                       </Badge>
@@ -705,38 +792,58 @@ export default function Home() {
                 </Button>
               ))}
             </div>
-            {selectedSubject && difficulty[selectedSubject] !== undefined && (
+
+            {selectedSubject && (
             <div className="space-y-2 rounded-xl border border-border bg-muted/40 p-4">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-semibold">Difficulty slider</span>
-                <Badge variant="secondary">
-                  {difficulty[selectedSubject] === 3
-                    ? "Hard"
-                    : difficulty[selectedSubject] === 2
-                      ? "Medium"
-                      : "Easy"}
-                </Badge>
+                <span className="font-semibold">Topic Difficulty</span>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={3}
-                value={difficulty[selectedSubject]}
-                onChange={(event) =>
-                  handleDifficultyChange(
-                    selectedSubject,
-                    Number(event.target.value) as number,
-                  )
-                }
-                className="w-full accent-primary"
-                aria-label="Difficulty"
-              />
-              <p className="text-xs text-muted-foreground">
-                Raising difficulty boosts priority scores and pulls sessions earlier in
-                the week.
+
+              <div className="flex flex-col md:flex-row gap-4 items-center">
+                  <div className="w-full md:w-1/2">
+                    <Label htmlFor="diff-topic-select" className="mb-1 block">Topic</Label>
+                    <Select value={selectedTopicId} onValueChange={setSelectedTopicId}>
+                        <SelectTrigger id="diff-topic-select">
+                            <SelectValue placeholder="Select a topic" />
+                        </SelectTrigger>
+                        <SelectContent>
+                             {subjectMap[selectedSubject]?.topics.length > 0 ? (
+                                 subjectMap[selectedSubject].topics.map(t => (
+                                     <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                 ))
+                             ) : (
+                                 <div className="p-2 text-sm text-muted-foreground">No topics defined for this subject.</div>
+                             )}
+                        </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedTopicId && (
+                    <div className="w-full md:w-1/2">
+                        <Label htmlFor="diff-level-select" className="mb-1 block">Difficulty</Label>
+                        <Select
+                            value={String(subjectMap[selectedSubject]?.topics.find(t => t.id === selectedTopicId)?.difficulty || 2)}
+                            onValueChange={(val) => handleTopicDifficultyChange(selectedSubject, selectedTopicId, parseInt(val))}
+                        >
+                            <SelectTrigger id="diff-level-select">
+                                <SelectValue placeholder="Level" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="1">Easy</SelectItem>
+                                <SelectItem value="2">Medium</SelectItem>
+                                <SelectItem value="3">Hard</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                  )}
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-2">
+                Raising difficulty for specific topics boosts priority scores for tasks linked to them.
               </p>
             </div>
             )}
+
             <div className="rounded-xl border border-border bg-card p-4 text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">Focus mode</span>
@@ -803,15 +910,15 @@ export default function Home() {
               <CardContent className="space-y-3 text-sm">
                 <Progress value={subject.progress} />
                 <div className="flex flex-wrap gap-2">
-                  {subject.weakTopics.map((topic) => (
-                    <Badge key={topic} variant="outline">
-                      {topic}
+                  {subject.topics.map((topic) => (
+                    <Badge key={topic.id} variant="outline" className={cn(topic.difficulty === 3 ? "border-red-500" : topic.difficulty === 1 ? "border-green-500" : "")}>
+                      {topic.name}
                     </Badge>
                   ))}
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Upcoming exam</span>
-                  <span>{new Date(subject.exam).toLocaleDateString()}</span>
+                  <span>{subject.exam ? new Date(subject.exam).toLocaleDateString() : "No exam date"}</span>
                 </div>
               </CardContent>
             </Card>
