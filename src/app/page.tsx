@@ -25,7 +25,6 @@ type Subject = {
   plannedHours: number;
   spentHours: number;
   weakTopics: string[];
-  color: string;
   exam: string;
 };
 
@@ -58,7 +57,6 @@ const SUBJECTS: Subject[] = [
     plannedHours: 12,
     spentHours: 8.5,
     weakTopics: ["Series tests", "Polar integrals"],
-    color: "from-indigo-500 to-blue-500",
     exam: "2026-02-18T14:00:00",
   },
   {
@@ -69,7 +67,6 @@ const SUBJECTS: Subject[] = [
     plannedHours: 8,
     spentHours: 5.3,
     weakTopics: ["RC timing", "Wave superposition"],
-    color: "from-amber-500 to-orange-500",
     exam: "2026-02-12T09:00:00",
   },
   {
@@ -80,7 +77,6 @@ const SUBJECTS: Subject[] = [
     plannedHours: 6,
     spentHours: 4.8,
     weakTopics: ["Cold War motivations"],
-    color: "from-emerald-500 to-green-500",
     exam: "2026-03-01T10:00:00",
   },
   {
@@ -91,7 +87,6 @@ const SUBJECTS: Subject[] = [
     plannedHours: 10,
     spentHours: 6.1,
     weakTopics: ["Mechanisms", "Spectra reading"],
-    color: "from-rose-500 to-pink-500",
     exam: "2026-02-25T16:00:00",
   },
 ];
@@ -230,10 +225,10 @@ function minutesToLabel(minutes: number) {
   return `${formattedHours}:${mins.toString().padStart(2, "0")} ${suffix}`;
 }
 
-function ringStyle(value: number, color: string) {
+function ringStyle(value: number) {
   const percent = Math.min(100, Math.max(0, value));
   return {
-    backgroundImage: `conic-gradient(${color} ${percent}%, rgba(226,232,240,0.6) ${percent}%)`,
+    backgroundImage: `conic-gradient(hsl(var(--primary)) ${percent}%, transparent ${percent}%)`,
   };
 }
 
@@ -421,17 +416,17 @@ export default function Home() {
   const focusMinsRemaining = (focusSeconds % 60).toString().padStart(2, "0");
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-16 pt-10 lg:px-8">
+    <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-16 pt-10 lg:px-8 font-sans">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Badge>Adaptive</Badge>
-            <Badge variant="info">Live prioritization</Badge>
+            <Badge variant="secondary">Live prioritization</Badge>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            FocusFlow — smart, adaptive study planner
+            FocusFlow
           </h1>
-          <p className="max-w-2xl text-base text-muted-foreground">
+          <p className="max-w-2xl text-base text-muted-foreground font-serif">
             Auto-builds and updates your study plan based on what&apos;s real:
             availability, missed blocks, exam pressure, and your weak topics.
           </p>
@@ -457,21 +452,20 @@ export default function Home() {
                 Pressure that stays controlled with auto-reschedules.
               </CardDescription>
             </div>
-            <Badge variant="warning">Next up</Badge>
+            <Badge variant="secondary">Next up</Badge>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4 md:gap-6">
-            <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-primary/15 to-primary/5">
+            <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-secondary">
               <div
-                className="h-28 w-28 rounded-full bg-white/70 p-3 text-center shadow-inner dark:bg-neutral-900/60"
+                className="h-28 w-28 rounded-full bg-background p-3 text-center border border-border"
                 style={ringStyle(
                   Math.max(
                     8,
                     100 - nextExamCountdown.days * 2.5 - nextExamCountdown.hours * 0.3,
                   ),
-                  "hsl(var(--primary))",
                 )}
               >
-                <div className="flex h-full flex-col items-center justify-center rounded-full bg-background/80 text-center">
+                <div className="flex h-full flex-col items-center justify-center rounded-full bg-background text-center">
                   <span className="text-2xl font-semibold">
                     {nextExamCountdown.days}d
                   </span>
@@ -493,10 +487,10 @@ export default function Home() {
                 shrinking breaks.
               </p>
               <div className="flex flex-wrap gap-3">
-                <Badge variant="info">
+                <Badge variant="secondary">
                   {new Date(nextExam.date).toLocaleDateString()}
                 </Badge>
-                <Badge variant="success">Auto-redistributing</Badge>
+                <Badge variant="outline">Auto-redistributing</Badge>
                 <Badge variant="outline">{nextExam.location}</Badge>
               </div>
             </div>
@@ -511,7 +505,7 @@ export default function Home() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="font-semibold">Weekly streak</span>
-              <Badge variant="success">🔥 6 days</Badge>
+              <Badge variant="outline">6 days</Badge>
             </div>
             <Progress value={(sessionsCompleted / 7) * 100} />
             <p className="text-xs text-muted-foreground">
@@ -531,10 +525,10 @@ export default function Home() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.15)]" />
+              <span className="h-2 w-2 rounded-full bg-foreground shadow-[0_0_0_6px_rgba(0,0,0,0.05)] dark:bg-white dark:shadow-none" />
               <span>{statusNote}</span>
             </div>
-            <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+            <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
               Miss a session? Tasks reshuffle, short fillers appear, and heavy
               blocks slide earlier automatically.
             </div>
@@ -555,7 +549,7 @@ export default function Home() {
               <Badge variant="outline">
                 {Math.round(todayPlannedMinutes / 60)}h planned
               </Badge>
-              <Badge variant="info">
+              <Badge variant="secondary">
                 {completedToday} / {todayBlocks.length} done
               </Badge>
             </div>
@@ -568,23 +562,23 @@ export default function Home() {
                 return (
                   <div
                     key={task.id}
-                    className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 p-4 transition hover:border-primary/40 hover:shadow-md md:flex-row md:items-center md:gap-4"
+                    className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40 hover:shadow-md md:flex-row md:items-center md:gap-4"
                   >
                     <div className="flex flex-1 flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">#{index + 1}</Badge>
-                        <Badge variant="info">
+                        <Badge variant="secondary">
                           {subject?.name ?? "Subject"}
                         </Badge>
-                        <Badge variant="warning">
+                        <Badge variant="outline">
                           {examWeight > 0.6 ? "Exam soon" : "Steady"}
                         </Badge>
-                        <Badge variant="success">
+                        <Badge variant="outline">
                           {Math.round((1 - urgencyWeight) * 50)} mins buffer
                         </Badge>
                       </div>
                       <div className="text-lg font-semibold">{task.title}</div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground font-mono">
                         {task.type === "practice" ? "Hands-on practice" : "Review"} •{" "}
                         {task.plannedMinutes} mins • {formatDayLabel(task.dayOffset)}
                       </p>
@@ -593,7 +587,7 @@ export default function Home() {
                       <Button
                         variant="ghost"
                         onClick={() => handleSkip(task.id)}
-                        className="text-amber-600 hover:bg-amber-500/10 dark:text-amber-300"
+                        className="text-muted-foreground hover:bg-muted"
                       >
                         Skip
                       </Button>
@@ -624,12 +618,12 @@ export default function Home() {
               return (
                 <div
                   key={task.id}
-                  className="rounded-lg border border-border/70 bg-muted/50 p-3"
+                  className="rounded-lg border border-border bg-muted/50 p-3"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{subject?.name}</Badge>
-                      <Badge variant="success">
+                      <Badge variant="secondary">
                         {Math.round(score * 100) / 10} priority
                       </Badge>
                     </div>
@@ -658,14 +652,14 @@ export default function Home() {
                 Drag + drop to reschedule. Calendar + timeline hybrid.
               </CardDescription>
             </div>
-            <Badge variant="info">Today</Badge>
+            <Badge variant="secondary">Today</Badge>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-5">
               {weeklyPlan.map((day) => (
                 <div
                   key={day.label}
-                  className="rounded-lg border border-border/50 bg-muted/40 p-3"
+                  className="rounded-lg border border-border bg-muted/40 p-3"
                 >
                   <div className="text-sm font-semibold">{day.label}</div>
                   <div>{day.hours}h planned</div>
@@ -673,7 +667,7 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="space-y-2 rounded-xl border border-border/60 bg-card/60 p-4">
+            <div className="space-y-2 rounded-xl border border-border bg-card p-4">
               {todayBlocks.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   All clear. Spare time is redistributed to weak topics.
@@ -689,13 +683,12 @@ export default function Home() {
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={() => handleDrop(block.id)}
                       className={cn(
-                        "flex flex-col gap-2 rounded-xl border border-border/60 bg-gradient-to-r p-4 text-sm shadow-sm transition",
-                        subject?.color ?? "from-muted to-muted",
+                        "flex flex-col gap-2 rounded-xl border border-border bg-background p-4 text-sm shadow-sm transition",
                         "hover:-translate-y-1 hover:shadow-md",
                       )}
                     >
                       <div className="flex items-center justify-between text-xs uppercase tracking-wide text-foreground/80">
-                        <span>
+                        <span className="font-mono">
                           {block.start} - {block.end}
                         </span>
                         <Badge variant="outline">{subject?.name}</Badge>
@@ -758,10 +751,10 @@ export default function Home() {
                 </Button>
               ))}
             </div>
-            <div className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-4">
+            <div className="space-y-2 rounded-xl border border-border bg-muted/40 p-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-semibold">Difficulty slider</span>
-                <Badge variant="info">
+                <Badge variant="secondary">
                   {difficulty[selectedSubject] === 3
                     ? "Hard"
                     : difficulty[selectedSubject] === 2
@@ -788,12 +781,12 @@ export default function Home() {
                 the week.
               </p>
             </div>
-            <div className="rounded-xl border border-border/60 bg-card/70 p-4 text-sm">
+            <div className="rounded-xl border border-border bg-card p-4 text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">Focus mode</span>
-                <Badge variant="success">{focusActive ? "Running" : "Idle"}</Badge>
+                <Badge variant="outline">{focusActive ? "Running" : "Idle"}</Badge>
               </div>
-              <div className="text-4xl font-semibold tabular-nums">
+              <div className="text-4xl font-semibold tabular-nums font-mono">
                 {focusMinutes}:{focusMinsRemaining}
               </div>
               <div className="mt-2 flex gap-2">
@@ -824,7 +817,7 @@ export default function Home() {
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {SUBJECTS.map((subject) => {
-          const ring = ringStyle(subject.progress, "hsl(var(--primary))");
+          const ring = ringStyle(subject.progress);
           return (
             <Card key={subject.id} className="overflow-hidden">
               <CardHeader className="flex items-start justify-between space-y-0">
@@ -835,17 +828,17 @@ export default function Home() {
                       {subject.difficulty.charAt(0).toUpperCase() +
                         subject.difficulty.slice(1)}
                     </Badge>
-                    <Badge variant="info">
+                    <Badge variant="secondary">
                       {subject.plannedHours - subject.spentHours}h left
                     </Badge>
                   </CardDescription>
                 </div>
                 <div className="relative">
                   <div
-                    className="flex h-16 w-16 items-center justify-center rounded-full bg-muted/70"
+                    className="flex h-16 w-16 items-center justify-center rounded-full bg-muted"
                     style={ring}
                   >
-                    <span className="text-sm font-semibold">
+                    <span className="text-sm font-semibold bg-background rounded-full h-14 w-14 flex items-center justify-center">
                       {Math.round(subject.progress)}%
                     </span>
                   </div>
@@ -855,7 +848,7 @@ export default function Home() {
                 <Progress value={subject.progress} />
                 <div className="flex flex-wrap gap-2">
                   {subject.weakTopics.map((topic) => (
-                    <Badge key={topic} variant="warning">
+                    <Badge key={topic} variant="outline">
                       {topic}
                     </Badge>
                   ))}
@@ -892,8 +885,8 @@ export default function Home() {
                   </div>
                   <div className="relative h-3 rounded-full bg-muted">
                     <div
-                      className="absolute left-0 top-0 h-3 rounded-full bg-gradient-to-r from-primary to-sky-500"
-                      style={{ width: `${plannedWidth}%`, opacity: 0.35 }}
+                      className="absolute left-0 top-0 h-3 rounded-full bg-primary"
+                      style={{ width: `${plannedWidth}%`, opacity: 0.2 }}
                     />
                     <div
                       className="absolute left-0 top-0 h-3 rounded-full bg-primary"
@@ -909,22 +902,22 @@ export default function Home() {
         <Card>
           <CardHeader className="flex items-center justify-between">
             <CardTitle>Analytics & insights</CardTitle>
-            <Badge variant="info">Updated live</Badge>
+            <Badge variant="secondary">Updated live</Badge>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="h-2 w-2 rounded-full bg-foreground" />
               <span>Consistency streak: 6 days</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              <span className="h-2 w-2 rounded-full bg-foreground" />
               <span>Weak topics flagged for micro-sessions</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-sky-500" />
+              <span className="h-2 w-2 rounded-full bg-foreground" />
               <span>Auto-balancing load after missed tasks</span>
             </div>
-            <div className="rounded-xl border border-border/70 bg-muted/40 p-3">
+            <div className="rounded-xl border border-border bg-muted/40 p-3">
               <p className="font-semibold">Focus mode</p>
               <p className="text-xs text-muted-foreground">
                 Pomodoro timer logs time and injects cool-down breaks. Sessions:

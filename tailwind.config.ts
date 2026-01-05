@@ -49,20 +49,6 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      keyframes: {
-        pulseGlow: {
-          "0%, 100%": { boxShadow: "0 0 0 0 rgba(59, 130, 246, 0.4)" },
-          "50%": { boxShadow: "0 0 0 10px rgba(59, 130, 246, 0)" },
-        },
-        float: {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-6px)" },
-        },
-      },
-      animation: {
-        pulseGlow: "pulseGlow 2.4s ease-in-out infinite",
-        float: "float 6s ease-in-out infinite",
-      },
     },
   },
   plugins: [],

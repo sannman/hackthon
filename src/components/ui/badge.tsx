@@ -2,19 +2,16 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: "default" | "outline" | "success" | "warning" | "info";
+  variant?: "default" | "outline" | "secondary";
 }
 
 const badgeStyles = {
   default:
-    "bg-primary/15 text-primary ring-1 ring-primary/20 dark:bg-primary/20 dark:text-primary-foreground",
+    "bg-primary text-primary-foreground border border-primary hover:bg-primary/90",
+  secondary:
+    "bg-secondary text-secondary-foreground hover:bg-secondary/80",
   outline:
-    "border border-border text-foreground dark:border-border/70",
-  success:
-    "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/20 dark:text-emerald-100",
-  warning:
-    "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-50",
-  info: "bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/20 dark:text-sky-50",
+    "text-foreground border border-border",
 };
 
 export function Badge({
@@ -22,11 +19,14 @@ export function Badge({
   variant = "default",
   ...props
 }: BadgeProps) {
+  // Map legacy variants to default or outline to ensure monochrome
+  const effectiveVariant = (variant === "success" || variant === "warning" || variant === "info") ? "outline" : variant;
+
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-        badgeStyles[variant],
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+        badgeStyles[effectiveVariant as keyof typeof badgeStyles],
         className,
       )}
       {...props}
