@@ -42,8 +42,6 @@ type Task = {
   importance: number;
 };
 
-type Exam = { subjectId: string; date: string; location: string };
-
 type TimelineBlock = {
   id: string;
   task: Task;
@@ -51,69 +49,7 @@ type TimelineBlock = {
   end: string;
 };
 
-const SUBJECTS: Subject[] = [
-  {
-    id: "math",
-    name: "Calculus II",
-    difficulty: "hard",
-    progress: 62,
-    plannedHours: 12,
-    spentHours: 8.5,
-    weakTopics: ["Series tests", "Polar integrals"],
-    exam: "2026-02-18T14:00:00",
-  },
-  {
-    id: "physics",
-    name: "Physics: Circuits",
-    difficulty: "medium",
-    progress: 54,
-    plannedHours: 8,
-    spentHours: 5.3,
-    weakTopics: ["RC timing", "Wave superposition"],
-    exam: "2026-02-12T09:00:00",
-  },
-  {
-    id: "history",
-    name: "World History",
-    difficulty: "medium",
-    progress: 71,
-    plannedHours: 6,
-    spentHours: 4.8,
-    weakTopics: ["Cold War motivations"],
-    exam: "2026-03-01T10:00:00",
-  },
-  {
-    id: "chemistry",
-    name: "Organic Chemistry",
-    difficulty: "hard",
-    progress: 48,
-    plannedHours: 10,
-    spentHours: 6.1,
-    weakTopics: ["Mechanisms", "Spectra reading"],
-    exam: "2026-02-25T16:00:00",
-  },
-];
-
-const EXAMS: Exam[] = SUBJECTS.map((subject) => ({
-  subjectId: subject.id,
-  date: subject.exam,
-  location: "Main Hall",
-}));
-
 const DEFAULT_TASKS: Task[] = [];
-
-const DEFAULT_DIFFICULTY = SUBJECTS.reduce<Record<string, number>>(
-  (acc, subject) => {
-    acc[subject.id] =
-      subject.difficulty === "hard"
-        ? 3
-        : subject.difficulty === "medium"
-          ? 2
-          : 1;
-    return acc;
-  },
-  {},
-);
 
 function loadTasksFromStorage(): Task[] {
   if (typeof window === "undefined") return DEFAULT_TASKS;
@@ -128,17 +64,30 @@ function loadTasksFromStorage(): Task[] {
   return DEFAULT_TASKS;
 }
 
+function loadSubjectsFromStorage(): Subject[] {
+  if (typeof window === "undefined") return [];
+  const savedSubjects = window.localStorage.getItem("smart-study-subjects");
+  if (savedSubjects) {
+    try {
+      return JSON.parse(savedSubjects) as Subject[];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function loadDifficultyFromStorage() {
-  if (typeof window === "undefined") return DEFAULT_DIFFICULTY;
+  if (typeof window === "undefined") return {};
   const saved = window.localStorage.getItem("smart-study-difficulty");
   if (saved) {
     try {
       return JSON.parse(saved) as Record<string, number>;
     } catch {
-      return DEFAULT_DIFFICULTY;
+      return {};
     }
   }
-  return DEFAULT_DIFFICULTY;
+  return {};
 }
 
 function formatDayLabel(dayOffset: number) {
@@ -159,14 +108,6 @@ function toCountdown(dateString: string) {
   return { days, hours };
 }
 
-function minutesToLabel(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  const formattedHours = (hours % 12 || 12).toString().padStart(2, "0");
-  const suffix = hours >= 12 ? "PM" : "AM";
-  return `${formattedHours}:${mins.toString().padStart(2, "0")} ${suffix}`;
-}
-
 function ringStyle(value: number) {
   const percent = Math.min(100, Math.max(0, value));
   return {
@@ -175,16 +116,12 @@ function ringStyle(value: number) {
 }
 
 export default function Home() {
+  const [subjects, setSubjects] = useState<Subject[]>(() => loadSubjectsFromStorage());
   const [tasks, setTasks] = useState<Task[]>(() => loadTasksFromStorage());
   const [difficulty, setDifficulty] = useState<Record<string, number>>(
     () => loadDifficultyFromStorage(),
   );
-  const [selectedSubject, setSelectedSubject] = useState<string>("math");
-  const [timelineOrder, setTimelineOrder] = useState<string[]>(() =>
-    loadTasksFromStorage()
-      .filter((task) => task.dayOffset === 0)
-      .map((task) => task.id),
-  );
+  const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [focusSeconds, setFocusSeconds] = useState(25 * 60);
   const [focusActive, setFocusActive] = useState(false);
@@ -194,10 +131,11 @@ export default function Home() {
     "Plan is adapting in real-time to your updates.",
   );
   const [showAddTask, setShowAddTask] = useState(false);
+  const [showAddSubject, setShowAddSubject] = useState(false);
   
   const DEFAULT_NEW_TASK = {
     title: "",
-    subjectId: "math",
+    subjectId: subjects.length > 0 ? subjects[0].id : "",
     plannedMinutes: 30,
     dayOffset: 0,
     type: "concept" as "concept" | "practice" | "review",
@@ -206,15 +144,41 @@ export default function Home() {
   
   const [newTask, setNewTask] = useState(DEFAULT_NEW_TASK);
 
+  const DEFAULT_NEW_SUBJECT = {
+    name: "",
+    difficulty: "medium" as Difficulty,
+    exam: "",
+  };
+
+  const [newSubject, setNewSubject] = useState(DEFAULT_NEW_SUBJECT);
+
   const subjectMap = useMemo(
-    () => Object.fromEntries(SUBJECTS.map((subject) => [subject.id, subject])),
-    [],
+    () => Object.fromEntries(subjects.map((subject) => [subject.id, subject])),
+    [subjects],
   );
+
+  useEffect(() => {
+    if (subjects.length > 0 && !selectedSubject) {
+        setSelectedSubject(subjects[0].id);
+    }
+  }, [subjects, selectedSubject]);
+
+  // Update DEFAULT_NEW_TASK subjectId when subjects change
+  useEffect(() => {
+      if (subjects.length > 0 && !newTask.subjectId) {
+          setNewTask(prev => ({ ...prev, subjectId: subjects[0].id }));
+      }
+  }, [subjects, newTask.subjectId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("smart-study-tasks", JSON.stringify(tasks));
   }, [tasks]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("smart-study-subjects", JSON.stringify(subjects));
+  }, [subjects]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -245,8 +209,10 @@ export default function Home() {
     return tasks
       .map((task) => {
         const subject = subjectMap[task.subjectId];
-        const exam = EXAMS.find((item) => item.subjectId === task.subjectId);
-        const { days } = exam ? toCountdown(exam.date) : { days: 30 };
+        // If subject doesn't exist (deleted?), handle gracefully
+        if (!subject) return { task, score: -1, subject, examWeight: 0, urgencyWeight: 0 };
+
+        const { days } = subject.exam ? toCountdown(subject.exam) : { days: 30 };
         const examWeight = Math.max(0, 30 - days) / 30;
         const difficultyWeight = difficulty[task.subjectId] ?? 1;
         const urgencyWeight = Math.max(0, 5 - task.dayOffset) / 5;
@@ -260,55 +226,21 @@ export default function Home() {
       .sort((a, b) => b.score - a.score);
   }, [difficulty, subjectMap, tasks]);
 
-  const todayBlocks: TimelineBlock[] = useMemo(() => {
-    const order = timelineOrder
-      .map((id) => tasks.find((task) => task.id === id && task.dayOffset === 0))
-      .filter(Boolean) as Task[];
-
-    const result = order.reduce(
-      (acc, task) => {
-        const start = minutesToLabel(acc.cursor);
-        const endMinutes = acc.cursor + task.plannedMinutes;
-        const end = minutesToLabel(endMinutes);
-        return {
-          cursor: endMinutes + 10,
-          blocks: [...acc.blocks, { id: task.id, task, start, end }],
-        };
-      },
-      { cursor: 8 * 60 + 10, blocks: [] as TimelineBlock[] },
-    );
-
-    return result.blocks;
-  }, [tasks, timelineOrder]);
-
-  const weeklyPlan = useMemo(() => {
-    return Array.from({ length: 5 }).map((_, index) => {
-      const hours =
-        tasks
-          .filter((task) => task.dayOffset === index)
-          .reduce((total, item) => total + item.plannedMinutes, 0) / 60;
-      return { label: formatDayLabel(index), hours: parseFloat(hours.toFixed(1)) };
-    });
-  }, [tasks]);
-
   const nextExam = useMemo(() => {
-    return EXAMS.reduce((soonest, current) => {
-      const soonestDate = new Date(soonest.date);
-      const currentDate = new Date(current.date);
+    if (subjects.length === 0) return null;
+
+    // Filter subjects with valid exam dates
+    const subjectsWithExams = subjects.filter(s => s.exam && !isNaN(new Date(s.exam).getTime()));
+    if (subjectsWithExams.length === 0) return null;
+
+    return subjectsWithExams.reduce((soonest, current) => {
+      const soonestDate = new Date(soonest.exam);
+      const currentDate = new Date(current.exam);
       return currentDate < soonestDate ? current : soonest;
-    }, EXAMS[0]);
-  }, []);
+    }, subjectsWithExams[0]);
+  }, [subjects]);
 
-  const nextExamCountdown = toCountdown(nextExam.date);
-
-  const todayPlannedMinutes = tasks
-    .filter((task) => task.dayOffset === 0)
-    .reduce((total, task) => total + task.plannedMinutes, 0);
-  const completedToday = tasks.filter(
-    (task) => task.dayOffset === 0 && task.status === "done",
-  ).length;
-
-  const topPriorities = prioritizedTasks.slice(0, 4);
+  const nextExamCountdown = nextExam ? toCountdown(nextExam.exam) : { days: 0, hours: 0 };
 
   const handleComplete = (taskId: string) => {
     setTasks((current) =>
@@ -323,30 +255,31 @@ export default function Home() {
     setStatusNote("Marked done. Remaining plan re-ordered to keep pace.");
   };
 
-  const handleSkip = (taskId: string) => {
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === taskId
-          ? { ...task, dayOffset: task.dayOffset + 1 }
-          : task,
-      ),
-    );
-    setTimelineOrder((current) => current.filter((id) => id !== taskId));
-    setStatusNote("Missed? We pushed it forward and lightened tomorrow.");
+  const handleDeleteTask = (taskId: string) => {
+    setTasks((current) => current.filter((task) => task.id !== taskId));
+    setStatusNote("Task deleted. Plan adjusted.");
   };
 
-  const handleReschedule = (taskId: string) => {
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === taskId ? { ...task, dayOffset: task.dayOffset + 1 } : task,
-      ),
-    );
-    setTimelineOrder((current) => current.filter((id) => id !== taskId));
-    setStatusNote("Rescheduled instantly—timeline reshuffled.");
+  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
+    setTasks((current) => {
+      const updatedTasks = current.map((task) =>
+        task.id === taskId ? { ...task, status: newStatus } : task,
+      );
+
+      if (newStatus === "done") {
+        const task = updatedTasks.find((item) => item.id === taskId);
+        if (task) {
+          setLoggedMinutes((minutes) => minutes + task.plannedMinutes);
+        }
+      }
+
+      return updatedTasks;
+    });
+    setStatusNote("Task status updated. Kanban board refreshed.");
   };
 
   const handleAddTask = () => {
-    if (!newTask.title.trim()) return;
+    if (!newTask.title.trim() || !newTask.subjectId) return;
     
     const task: Task = {
       id: `t${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -360,45 +293,37 @@ export default function Home() {
     };
     
     setTasks((current) => [...current, task]);
-    setNewTask(DEFAULT_NEW_TASK);
+    setNewTask({...DEFAULT_NEW_TASK, subjectId: subjects[0]?.id || ""});
     setShowAddTask(false);
     setStatusNote("New task added. Timeline recalculated.");
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    setTasks((current) => current.filter((task) => task.id !== taskId));
-    setTimelineOrder((current) => current.filter((id) => id !== taskId));
-    setStatusNote("Task deleted. Plan adjusted.");
-  };
+  const handleAddSubject = () => {
+      if (!newSubject.name.trim()) return;
 
-  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
-    setTasks((current) => {
-      const updatedTasks = current.map((task) =>
-        task.id === taskId ? { ...task, status: newStatus } : task,
-      );
-      
-      if (newStatus === "done") {
-        const task = updatedTasks.find((item) => item.id === taskId);
-        if (task) {
-          setLoggedMinutes((minutes) => minutes + task.plannedMinutes);
-        }
-      }
-      
-      return updatedTasks;
-    });
-    setStatusNote("Task status updated. Kanban board refreshed.");
-  };
+      const id = newSubject.name.toLowerCase().replace(/\s+/g, '-');
+      const subject: Subject = {
+          id: id,
+          name: newSubject.name,
+          difficulty: newSubject.difficulty,
+          progress: 0,
+          plannedHours: 10,
+          spentHours: 0,
+          weakTopics: [],
+          exam: newSubject.exam
+      };
 
-  const handleDrop = (targetId: string) => {
-    if (!draggingId || draggingId === targetId) return;
-    setTimelineOrder((current) => {
-      const filtered = current.filter((id) => id !== draggingId);
-      const index = filtered.indexOf(targetId);
-      filtered.splice(index, 0, draggingId);
-      return filtered;
-    });
-    setStatusNote("Drag-and-drop received. Blocks reordered for today.");
-    setDraggingId(null);
+      setSubjects(prev => [...prev, subject]);
+      
+      // Initialize difficulty
+      setDifficulty(prev => ({
+          ...prev,
+          [id]: newSubject.difficulty === 'hard' ? 3 : newSubject.difficulty === 'medium' ? 2 : 1
+      }));
+
+      setNewSubject(DEFAULT_NEW_SUBJECT);
+      setShowAddSubject(false);
+      setStatusNote("New subject added.");
   };
 
   const handleDifficultyChange = (subjectId: string, value: number) => {
@@ -439,6 +364,58 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Add Subject Section */}
+      <div className="flex justify-end">
+          <Button onClick={() => setShowAddSubject(!showAddSubject)}>
+              {showAddSubject ? "Cancel Add Subject" : "+ Add Subject"}
+          </Button>
+      </div>
+
+      {showAddSubject && (
+        <Card>
+            <CardHeader>
+                <CardTitle>Add New Subject</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="subject-name">Subject Name</Label>
+                        <Input
+                            id="subject-name"
+                            placeholder="e.g. Calculus"
+                            value={newSubject.name}
+                            onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="subject-difficulty">Difficulty</Label>
+                        <Select
+                            id="subject-difficulty"
+                            value={newSubject.difficulty}
+                            onChange={(e) => setNewSubject({ ...newSubject, difficulty: e.target.value as Difficulty })}
+                        >
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="subject-exam">Exam Date</Label>
+                        <Input
+                            id="subject-exam"
+                            type="datetime-local"
+                            value={newSubject.exam}
+                            onChange={(e) => setNewSubject({ ...newSubject, exam: e.target.value })}
+                        />
+                    </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                    <Button onClick={handleAddSubject}>Save Subject</Button>
+                </div>
+            </CardContent>
+        </Card>
+      )}
+
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-start justify-between space-y-0">
@@ -451,45 +428,50 @@ export default function Home() {
             <Badge variant="secondary">Next up</Badge>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4 md:gap-6">
-            <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-secondary">
-              <div
-                className="h-28 w-28 rounded-full bg-background p-3 text-center border border-border"
-                style={ringStyle(
-                  Math.max(
-                    8,
-                    100 - nextExamCountdown.days * 2.5 - nextExamCountdown.hours * 0.3,
-                  ),
-                )}
-              >
-                <div className="flex h-full flex-col items-center justify-center rounded-full bg-background text-center">
-                  <span className="text-2xl font-semibold">
-                    {nextExamCountdown.days}d
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {nextExamCountdown.hours}h left
-                  </span>
+            {nextExam ? (
+                <>
+                <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-secondary">
+                  <div
+                    className="h-28 w-28 rounded-full bg-background p-3 text-center border border-border"
+                    style={ringStyle(
+                      Math.max(
+                        8,
+                        100 - nextExamCountdown.days * 2.5 - nextExamCountdown.hours * 0.3,
+                      ),
+                    )}
+                  >
+                    <div className="flex h-full flex-col items-center justify-center rounded-full bg-background text-center">
+                      <span className="text-2xl font-semibold">
+                        {nextExamCountdown.days}d
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {nextExamCountdown.hours}h left
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold">
-                  {subjectMap[nextExam.subjectId]?.name}
-                </span>
-                <Badge variant="outline">Countdown live</Badge>
-              </div>
-              <p className="text-muted-foreground">
-                System boosts weight for near exams, sliding tasks earlier and
-                shrinking breaks.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Badge variant="secondary">
-                  {new Date(nextExam.date).toLocaleDateString()}
-                </Badge>
-                <Badge variant="outline">Auto-redistributing</Badge>
-                <Badge variant="outline">{nextExam.location}</Badge>
-              </div>
-            </div>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-semibold">
+                      {nextExam.name}
+                    </span>
+                    <Badge variant="outline">Countdown live</Badge>
+                  </div>
+                  <p className="text-muted-foreground">
+                    System boosts weight for near exams, sliding tasks earlier and
+                    shrinking breaks.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Badge variant="secondary">
+                      {new Date(nextExam.exam).toLocaleDateString()}
+                    </Badge>
+                    <Badge variant="outline">Auto-redistributing</Badge>
+                  </div>
+                </div>
+                </>
+            ) : (
+                <div className="text-muted-foreground p-4">No exams scheduled. Add a subject with an exam date.</div>
+            )}
           </CardContent>
         </Card>
 
@@ -514,34 +496,19 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle>Plan health</CardTitle>
-            <CardDescription>Real-time adjustments</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-foreground shadow-[0_0_0_6px_rgba(0,0,0,0.05)] dark:bg-white dark:shadow-none" />
-              <span>{statusNote}</span>
-            </div>
-            <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-              Miss a session? Tasks reshuffle, short fillers appear, and heavy
-              blocks slide earlier automatically.
-            </div>
-          </CardContent>
-        </Card>
+        {/* Removed Plan health card */}
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-3">
           <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <CardTitle>Kanban Board</CardTitle>
+              <CardTitle>Today&apos;s tasks</CardTitle>
               <CardDescription>
                 Drag tasks between columns to update their status
               </CardDescription>
             </div>
-            <Button onClick={() => setShowAddTask(true)}>
+            <Button onClick={() => setShowAddTask(true)} disabled={subjects.length === 0}>
               + Add Task
             </Button>
           </CardHeader>
@@ -570,7 +537,7 @@ export default function Home() {
                         setNewTask({ ...newTask, subjectId: e.target.value })
                       }
                     >
-                      {SUBJECTS.map((subject) => (
+                      {subjects.map((subject) => (
                         <option key={subject.id} value={subject.id}>
                           {subject.name}
                         </option>
@@ -674,7 +641,7 @@ export default function Home() {
                                     </div>
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       <Badge variant="outline" className="text-xs">
-                                        {subject?.name}
+                                        {subject?.name || "Unknown"}
                                       </Badge>
                                       <Badge variant="secondary" className="text-xs">
                                         {task.plannedMinutes}m
@@ -712,204 +679,12 @@ export default function Home() {
         </Card>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>Today&apos;s tasks</CardTitle>
-              <CardDescription>
-                Smart priority considers exam proximity, importance, and momentum.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline">
-                {Math.round(todayPlannedMinutes / 60)}h planned
-              </Badge>
-              <Badge variant="secondary">
-                {completedToday} / {todayBlocks.length} done
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {topPriorities
-              .filter(({ task }) => task.dayOffset === 0)
-              .map(({ task, examWeight, urgencyWeight }, index) => {
-                const subject = subjectMap[task.subjectId];
-                return (
-                  <div
-                    key={task.id}
-                    className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40 hover:shadow-md md:flex-row md:items-center md:gap-4"
-                  >
-                    <div className="flex flex-1 flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">#{index + 1}</Badge>
-                        <Badge variant="secondary">
-                          {subject?.name ?? "Subject"}
-                        </Badge>
-                        <Badge variant="outline">
-                          {examWeight > 0.6 ? "Exam soon" : "Steady"}
-                        </Badge>
-                        <Badge variant="outline">
-                          {Math.round((1 - urgencyWeight) * 50)} mins buffer
-                        </Badge>
-                      </div>
-                      <div className="text-lg font-semibold">{task.title}</div>
-                      <p className="text-sm text-muted-foreground font-mono">
-                        {task.type === "practice" ? "Hands-on practice" : "Review"} •{" "}
-                        {task.plannedMinutes} mins • {formatDayLabel(task.dayOffset)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSkip(task.id)}
-                        className="text-muted-foreground hover:bg-muted"
-                      >
-                        Skip
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleReschedule(task.id)}
-                      >
-                        Reschedule
-                      </Button>
-                      <Button onClick={() => handleComplete(task.id)}>Done</Button>
-                    </div>
-                  </div>
-                );
-              })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Priority engine</CardTitle>
-            <CardDescription>Why these tasks bubble up</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {topPriorities.map(({ task, score }) => {
-              const subject = subjectMap[task.subjectId];
-              const exam = EXAMS.find((item) => item.subjectId === task.subjectId);
-              const countdown = exam ? toCountdown(exam.date) : { days: 30, hours: 0 };
-              return (
-                <div
-                  key={task.id}
-                  className="rounded-lg border border-border bg-muted/50 p-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{subject?.name}</Badge>
-                      <Badge variant="secondary">
-                        {Math.round(score * 100) / 10} priority
-                      </Badge>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {countdown.days}d {countdown.hours}h
-                    </span>
-                  </div>
-                  <p className="mt-1 font-medium">{task.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Weighted by exam proximity, difficulty, past performance, and time
-                    left this week.
-                  </p>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      </section>
+      {/* Removed original Today's tasks section */}
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>Interactive study timeline</CardTitle>
-              <CardDescription>
-                Drag + drop to reschedule. Calendar + timeline hybrid.
-              </CardDescription>
-            </div>
-            <Badge variant="secondary">Today</Badge>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-5">
-              {weeklyPlan.map((day) => (
-                <div
-                  key={day.label}
-                  className="rounded-lg border border-border bg-muted/40 p-3"
-                >
-                  <div className="text-sm font-semibold">{day.label}</div>
-                  <div>{day.hours}h planned</div>
-                </div>
-              ))}
-            </div>
+        {/* Removed Interactive study timeline Card */}
 
-            <div className="space-y-2 rounded-xl border border-border bg-card p-4">
-              {todayBlocks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  All clear. Spare time is redistributed to weak topics.
-                </p>
-              ) : (
-                todayBlocks.map((block) => {
-                  const subject = subjectMap[block.task.subjectId];
-                  return (
-                    <div
-                      key={block.id}
-                      draggable
-                      onDragStart={() => setDraggingId(block.id)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => handleDrop(block.id)}
-                      className={cn(
-                        "flex flex-col gap-2 rounded-xl border border-border bg-background p-4 text-sm shadow-sm transition",
-                        "hover:-translate-y-1 hover:shadow-md",
-                      )}
-                    >
-                      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-foreground/80">
-                        <span className="font-mono">
-                          {block.start} - {block.end}
-                        </span>
-                        <Badge variant="outline">{subject?.name}</Badge>
-                      </div>
-                      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                        <div className="space-y-1">
-                          <div className="font-semibold">{block.task.title}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {block.task.plannedMinutes} mins • {block.task.type} •{" "}
-                            {block.task.status === "pending"
-                              ? "Pending"
-                              : block.task.status === "in-progress"
-                                ? "In Progress"
-                                : "Completed"}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleSkip(block.id)}
-                          >
-                            Skip
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleReschedule(block.id)}
-                          >
-                            Move
-                          </Button>
-                          <Button size="sm" onClick={() => handleComplete(block.id)}>
-                            Done
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
+        <Card className="xl:col-span-3">
           <CardHeader>
             <CardTitle>Difficulty + adaptive weight</CardTitle>
             <CardDescription>
@@ -918,7 +693,8 @@ export default function Home() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              {SUBJECTS.map((subject) => (
+              {subjects.length === 0 && <div className="text-sm text-muted-foreground">No subjects added yet.</div>}
+              {subjects.map((subject) => (
                 <Button
                   key={subject.id}
                   size="sm"
@@ -929,6 +705,7 @@ export default function Home() {
                 </Button>
               ))}
             </div>
+            {selectedSubject && difficulty[selectedSubject] !== undefined && (
             <div className="space-y-2 rounded-xl border border-border bg-muted/40 p-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-semibold">Difficulty slider</span>
@@ -959,6 +736,7 @@ export default function Home() {
                 the week.
               </p>
             </div>
+            )}
             <div className="rounded-xl border border-border bg-card p-4 text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">Focus mode</span>
@@ -994,7 +772,7 @@ export default function Home() {
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {SUBJECTS.map((subject) => {
+        {subjects.map((subject) => {
           const ring = ringStyle(subject.progress);
           return (
             <Card key={subject.id} className="overflow-hidden">
@@ -1048,7 +826,7 @@ export default function Home() {
             <Badge variant="outline">Live</Badge>
           </CardHeader>
           <CardContent className="space-y-4">
-            {SUBJECTS.map((subject) => {
+            {subjects.map((subject) => {
               const planned = subject.plannedHours;
               const spent = subject.spentHours;
               const plannedWidth = Math.min(100, planned * 8);
