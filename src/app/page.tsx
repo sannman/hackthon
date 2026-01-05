@@ -11,11 +11,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type Difficulty = "easy" | "medium" | "hard";
-type TaskStatus = "pending" | "done" | "skipped";
+type TaskStatus = "pending" | "in-progress" | "done";
 
 type Subject = {
   id: string;
@@ -97,68 +100,7 @@ const EXAMS: Exam[] = SUBJECTS.map((subject) => ({
   location: "Main Hall",
 }));
 
-const DEFAULT_TASKS: Task[] = [
-  {
-    id: "t1",
-    title: "Alternating series drill",
-    subjectId: "math",
-    plannedMinutes: 50,
-    dayOffset: 0,
-    status: "pending",
-    type: "practice",
-    importance: 0.8,
-  },
-  {
-    id: "t2",
-    title: "Flashcards: Cold War flashback",
-    subjectId: "history",
-    plannedMinutes: 35,
-    dayOffset: 1,
-    status: "pending",
-    type: "review",
-    importance: 0.5,
-  },
-  {
-    id: "t3",
-    title: "Circuit lab prep",
-    subjectId: "physics",
-    plannedMinutes: 45,
-    dayOffset: 0,
-    status: "pending",
-    type: "concept",
-    importance: 0.6,
-  },
-  {
-    id: "t4",
-    title: "Mechanism mapping sprint",
-    subjectId: "chemistry",
-    plannedMinutes: 40,
-    dayOffset: 0,
-    status: "pending",
-    type: "practice",
-    importance: 0.7,
-  },
-  {
-    id: "t5",
-    title: "Essay outline: 19th century reforms",
-    subjectId: "history",
-    plannedMinutes: 50,
-    dayOffset: 2,
-    status: "pending",
-    type: "review",
-    importance: 0.4,
-  },
-  {
-    id: "t6",
-    title: "Re-try skipped stoichiometry set",
-    subjectId: "chemistry",
-    plannedMinutes: 35,
-    dayOffset: 1,
-    status: "skipped",
-    type: "practice",
-    importance: 0.65,
-  },
-];
+const DEFAULT_TASKS: Task[] = [];
 
 const DEFAULT_DIFFICULTY = SUBJECTS.reduce<Record<string, number>>(
   (acc, subject) => {
@@ -251,6 +193,18 @@ export default function Home() {
   const [statusNote, setStatusNote] = useState(
     "Plan is adapting in real-time to your updates.",
   );
+  const [showAddTask, setShowAddTask] = useState(false);
+  
+  const DEFAULT_NEW_TASK = {
+    title: "",
+    subjectId: "math",
+    plannedMinutes: 30,
+    dayOffset: 0,
+    type: "concept" as "concept" | "practice" | "review",
+    importance: 0.5,
+  };
+  
+  const [newTask, setNewTask] = useState(DEFAULT_NEW_TASK);
 
   const subjectMap = useMemo(
     () => Object.fromEntries(SUBJECTS.map((subject) => [subject.id, subject])),
@@ -296,13 +250,11 @@ export default function Home() {
         const examWeight = Math.max(0, 30 - days) / 30;
         const difficultyWeight = difficulty[task.subjectId] ?? 1;
         const urgencyWeight = Math.max(0, 5 - task.dayOffset) / 5;
-        const statusPenalty = task.status === "skipped" ? -0.4 : 0;
         const score =
           difficultyWeight * 0.35 +
           examWeight * 0.35 +
           urgencyWeight * 0.2 +
-          task.importance * 0.25 +
-          statusPenalty;
+          task.importance * 0.25;
         return { task, score, subject, examWeight, urgencyWeight };
       })
       .sort((a, b) => b.score - a.score);
@@ -375,7 +327,7 @@ export default function Home() {
     setTasks((current) =>
       current.map((task) =>
         task.id === taskId
-          ? { ...task, status: "skipped", dayOffset: task.dayOffset + 1 }
+          ? { ...task, dayOffset: task.dayOffset + 1 }
           : task,
       ),
     );
@@ -391,6 +343,50 @@ export default function Home() {
     );
     setTimelineOrder((current) => current.filter((id) => id !== taskId));
     setStatusNote("Rescheduled instantly—timeline reshuffled.");
+  };
+
+  const handleAddTask = () => {
+    if (!newTask.title.trim()) return;
+    
+    const task: Task = {
+      id: `t${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title: newTask.title,
+      subjectId: newTask.subjectId,
+      plannedMinutes: newTask.plannedMinutes,
+      dayOffset: newTask.dayOffset,
+      status: "pending",
+      type: newTask.type,
+      importance: newTask.importance,
+    };
+    
+    setTasks((current) => [...current, task]);
+    setNewTask(DEFAULT_NEW_TASK);
+    setShowAddTask(false);
+    setStatusNote("New task added. Timeline recalculated.");
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    setTasks((current) => current.filter((task) => task.id !== taskId));
+    setTimelineOrder((current) => current.filter((id) => id !== taskId));
+    setStatusNote("Task deleted. Plan adjusted.");
+  };
+
+  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
+    setTasks((current) => {
+      const updatedTasks = current.map((task) =>
+        task.id === taskId ? { ...task, status: newStatus } : task,
+      );
+      
+      if (newStatus === "done") {
+        const task = updatedTasks.find((item) => item.id === taskId);
+        if (task) {
+          setLoggedMinutes((minutes) => minutes + task.plannedMinutes);
+        }
+      }
+      
+      return updatedTasks;
+    });
+    setStatusNote("Task status updated. Kanban board refreshed.");
   };
 
   const handleDrop = (targetId: string) => {
@@ -531,6 +527,186 @@ export default function Home() {
             <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
               Miss a session? Tasks reshuffle, short fillers appear, and heavy
               blocks slide earlier automatically.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-3">
+          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Kanban Board</CardTitle>
+              <CardDescription>
+                Drag tasks between columns to update their status
+              </CardDescription>
+            </div>
+            <Button onClick={() => setShowAddTask(true)}>
+              + Add Task
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {showAddTask && (
+              <div className="mb-6 rounded-xl border border-border bg-muted/40 p-4 space-y-4">
+                <h3 className="text-lg font-semibold">Add New Task</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="task-title">Task Title</Label>
+                    <Input
+                      id="task-title"
+                      placeholder="Enter task title"
+                      value={newTask.title}
+                      onChange={(e) =>
+                        setNewTask({ ...newTask, title: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="task-subject">Subject</Label>
+                    <Select
+                      id="task-subject"
+                      value={newTask.subjectId}
+                      onChange={(e) =>
+                        setNewTask({ ...newTask, subjectId: e.target.value })
+                      }
+                    >
+                      {SUBJECTS.map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="task-minutes">Duration (minutes)</Label>
+                    <Input
+                      id="task-minutes"
+                      type="number"
+                      min="5"
+                      max="180"
+                      value={newTask.plannedMinutes}
+                      onChange={(e) =>
+                        setNewTask({
+                          ...newTask,
+                          plannedMinutes: parseInt(e.target.value) || 30,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="task-type">Type</Label>
+                    <Select
+                      id="task-type"
+                      value={newTask.type}
+                      onChange={(e) =>
+                        setNewTask({
+                          ...newTask,
+                          type: e.target.value as "concept" | "practice" | "review",
+                        })
+                      }
+                    >
+                      <option value="concept">Concept</option>
+                      <option value="practice">Practice</option>
+                      <option value="review">Review</option>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleAddTask}>Add Task</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddTask(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {(["pending", "in-progress", "done"] as TaskStatus[]).map(
+                (status) => {
+                  const statusTasks = tasks.filter(
+                    (task) => task.status === status,
+                  );
+                  const statusLabel =
+                    status === "pending"
+                      ? "Pending"
+                      : status === "in-progress"
+                        ? "In Progress"
+                        : "Done";
+                  
+                  return (
+                    <div
+                      key={status}
+                      className="rounded-xl border border-border bg-muted/20 p-4 min-h-[400px]"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (draggingId) {
+                          handleStatusChange(draggingId, status);
+                          setDraggingId(null);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-lg">{statusLabel}</h3>
+                        <Badge variant="secondary">{statusTasks.length}</Badge>
+                      </div>
+                      <div className="space-y-3">
+                        {statusTasks.map((task) => {
+                          const subject = subjectMap[task.subjectId];
+                          return (
+                            <div
+                              key={task.id}
+                              draggable
+                              onDragStart={() => setDraggingId(task.id)}
+                              onDragEnd={() => setDraggingId(null)}
+                              className={cn(
+                                "rounded-lg border border-border bg-card p-3 cursor-move transition hover:shadow-md",
+                                draggingId === task.id && "opacity-50",
+                              )}
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div className="font-semibold text-sm">
+                                      {task.title}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      <Badge variant="outline" className="text-xs">
+                                        {subject?.name}
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-xs">
+                                        {task.plannedMinutes}m
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">
+                                        {task.type}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleDeleteTask(task.id)}
+                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                  >
+                                    ×
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {statusTasks.length === 0 && (
+                          <div className="text-sm text-muted-foreground text-center py-8">
+                            Drop tasks here
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                },
+              )}
             </div>
           </CardContent>
         </Card>
@@ -698,9 +874,11 @@ export default function Home() {
                           <div className="font-semibold">{block.task.title}</div>
                           <div className="text-xs text-muted-foreground">
                             {block.task.plannedMinutes} mins • {block.task.type} •{" "}
-                            {block.task.status === "skipped"
-                              ? "Was missed — pulled forward."
-                              : "On track"}
+                            {block.task.status === "pending"
+                              ? "Pending"
+                              : block.task.status === "in-progress"
+                                ? "In Progress"
+                                : "Completed"}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
