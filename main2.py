@@ -1,3 +1,0 @@
-def main():
-    #Same as 1st topic but added more fetures like completed task , upcoming exams ect
-    ...
