@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type Theme = "light" | "dark";
 
@@ -22,7 +29,20 @@ function getInitialTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => getInitialTheme());
+  const [theme, setThemeState] = useState<Theme>("light");
+  const isActive = useRef(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    isActive.current = true;
+    queueMicrotask(() => {
+      if (!isActive.current) return;
+      setThemeState(getInitialTheme());
+    });
+    return () => {
+      isActive.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
